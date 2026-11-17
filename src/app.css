@@ -118,3 +118,115 @@ button.secondary:hover {
   background-color: var(--ctp-surface0);
   color: var(--ctp-text);
 }
+/* Auth Form Styles */
+.auth-container {
+  background: var(--ctp-surface0);
+  padding: 2rem;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.auth-container h2 {
+  text-align: center;
+  margin-bottom: 1.5rem;
+  color: var(--ctp-text);
+}
+
+.error-message {
+  color: var(--ctp-red);
+  background: var(--ctp-base);
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  text-align: center;
+  font-size: 0.9rem;
+  border: 1px solid var(--ctp-red);
+}
+
+.primary-btn {
+  width: 100%;
+  padding: 0.75rem;
+  margin-top: 1rem;
+  background-color: var(--ctp-blue);
+  color: var(--ctp-base);
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.primary-btn:hover:not(:disabled) {
+  background-color: var(--ctp-blue-hover);
+}
+
+.primary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.toggle-text {
+  text-align: center;
+  margin-top: 1.5rem;
+  color: var(--ctp-surface2);
+  font-size: 0.9rem;
+}
+
+.text-btn {
+  background: none;
+  border: none;
+  color: var(--ctp-blue);
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0;
+  margin-left: 0.25rem;
+  text-decoration: underline;
+}
+
+.text-btn:hover {
+  color: var(--ctp-blue-hover);
+}
+
+/* Welcome Screen Styles */
+.welcome-container {
+  text-align: center;
+  padding: 2rem;
+  background: var(--ctp-surface0);
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  min-width: 300px;
+}
+
+.welcome-container h1 {
+  color: var(--ctp-green);
+  margin-bottom: 1rem;
+}
+
+.welcome-container p {
+  color: var(--ctp-surface2);
+  margin-bottom: 2rem;
+}
+
+.logout-btn {
+  padding: 0.75rem 1.5rem;
+  background-color: var(--ctp-red);
+  color: var(--ctp-base);
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.logout-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.logout-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

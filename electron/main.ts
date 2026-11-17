@@ -7,14 +7,9 @@ import Store from 'electron-store';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Логируем путь, чтобы убедиться, что он ведет в dist-electron
-const preloadPath = path.join(__dirname, 'preload.js');
-
 const store = new Store({
   name: 'habitat-config',
-  defaults: {
-    serverBaseUrl: 'http://localhost:8080',
-  },
+  defaults: { serverBaseUrl: 'http://localhost:8080' },
 });
 
 const SERVICE_NAME = 'habitat-client';
@@ -42,7 +37,7 @@ const createWindow = () => {
     width: 1200,
     height: 800,
     webPreferences: {
-      preload: preloadPath,
+      preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
     },
@@ -53,68 +48,126 @@ const createWindow = () => {
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
-
   return mainWindow;
 };
 
 app.whenReady().then(() => {
   createWindow();
-
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  if (process.platform !== 'darwin') app.quit();
 });
 
-// --- IPC Handlers ---
+const getSafeBaseUrl = (): string => {
+  const rawUrl = store.get('serverBaseUrl');
+  return typeof rawUrl === 'string' ? rawUrl : 'http://localhost:8080';
+};
+
+// --- Server Handlers ---
+
+ipcMain.handle('server:get-config', () => ({ serverBaseUrl: getSafeBaseUrl() }));
 
 ipcMain.handle('server:set-config', (event, baseUrl: string) => {
   store.set('serverBaseUrl', baseUrl);
   return { success: true };
 });
 
-ipcMain.handle('server:get-config', () => {
-  const rawUrl = store.get('serverBaseUrl');
-  // Защита: если вдруг в хранилище мусор, используем значение по умолчанию
-  const safeUrl = typeof rawUrl === 'string' ? rawUrl : 'http://localhost:8080';
-  return { serverBaseUrl: safeUrl };
-});
-
 ipcMain.handle('server:check-health', async () => {
-  const rawUrl = store.get('serverBaseUrl');
-  const baseUrl = typeof rawUrl === 'string' ? rawUrl : 'http://localhost:8080';
+  const baseUrl = getSafeBaseUrl();
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    controller.abort();
-  }, 3000);
+  const timeoutId = setTimeout(() => controller.abort(), 3000);
 
   try {
-    const response = await fetch(`${baseUrl}/healthz`, {
-      method: 'GET',
-      signal: controller.signal,
-    });
+    const response = await fetch(`${baseUrl}/healthz`, { method: 'GET', signal: controller.signal });
     clearTimeout(timeoutId);
-
     if (response.ok) {
       const text = await response.text();
-      const isSuccess = text.trim() === 'ok';
-      return { success: isSuccess };
+      return { success: text.trim() === 'ok' };
     }
     return { success: false, error: `HTTP ${response.status}` };
   } catch (error: any) {
     clearTimeout(timeoutId);
-    const errorMsg = error.name === 'AbortError' 
-      ? 'Превышено время ожидания ответа сервера' 
-      : error.message;
-    return { success: false, error: errorMsg };
+    return { success: false, error: error.name === 'AbortError' ? 'Превышено время ожидания' : error.message };
   }
+});
+
+// --- Auth Handlers ---
+
+ipcMain.handle('auth:login', async (event, credentials: { email: string; password: string }) => {
+  const baseUrl = getSafeBaseUrl();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(credentials),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      return { success: false, error: errorData.message || 'Ошибка авторизации' };
+    }
+
+    const data = await response.json();
+    await keytar.setPassword(SERVICE_NAME, ACCOUNT_NAME, data.refresh_token);
+    accessToken = data.access_token;
+
+    // Гарантируем чистую сериализацию для IPC
+    return { success: true, user: JSON.parse(JSON.stringify(data.user)) };
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    console.error('Login error:', error.message);
+    return { success: false, error: error.name === 'AbortError' ? 'Превышено время ожидания' : 'Ошибка сети' };
+  }
+});
+
+ipcMain.handle('auth:register', async (event, data: { email: string; password: string; display_name: string }) => {
+  const baseUrl = getSafeBaseUrl();
+  try {
+    const response = await fetch(`${baseUrl}/api/v1/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      return { success: false, error: errorData.message || 'Ошибка регистрации' };
+    }
+    return { success: true };
+  } catch (error: any) {
+    console.error('Register error:', error.message);
+    return { success: false, error: 'Ошибка сети' };
+  }
+});
+
+ipcMain.handle('auth:logout', async () => {
+  const baseUrl = getSafeBaseUrl();
+  const refreshToken = await keytar.getPassword(SERVICE_NAME, ACCOUNT_NAME);
+  
+  if (refreshToken) {
+    try {
+      await fetch(`${baseUrl}/api/v1/auth/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  }
+  
+  accessToken = null;
+  await keytar.deletePassword(SERVICE_NAME, ACCOUNT_NAME);
+  return { success: true };
 });
 
 ipcMain.handle('auth:save-refresh-token', async (event, token: string) => {
@@ -122,17 +175,14 @@ ipcMain.handle('auth:save-refresh-token', async (event, token: string) => {
     await keytar.setPassword(SERVICE_NAME, ACCOUNT_NAME, token);
     return { success: true };
   } catch (error: any) {
-    console.error('Failed to save refresh token:', error);
     return { success: false, error: error.message };
   }
 });
 
 ipcMain.handle('auth:get-refresh-token', async () => {
   try {
-    const token = await keytar.getPassword(SERVICE_NAME, ACCOUNT_NAME);
-    return token || null;
-  } catch (error: any) {
-    console.error('Failed to get refresh token:', error);
+    return (await keytar.getPassword(SERVICE_NAME, ACCOUNT_NAME)) || null;
+  } catch (error) {
     return null;
   }
 });
@@ -143,27 +193,20 @@ ipcMain.handle('auth:clear-tokens', async () => {
     await keytar.deletePassword(SERVICE_NAME, ACCOUNT_NAME);
     return { success: true };
   } catch (error: any) {
-    console.error('Failed to clear tokens:', error);
     return { success: false, error: error.message };
   }
 });
 
 ipcMain.handle('auth:make-authenticated-request', async (event, url: string, options: RequestInit) => {
-  const baseUrl = store.get('serverBaseUrl') as string;
+  const baseUrl = getSafeBaseUrl();
   const fullUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
 
   const makeRequest = async (token: string | null) => {
     const headers = new Headers(options.headers || {});
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`);
-    }
+    if (token) headers.set('Authorization', `Bearer ${token}`);
     headers.set('Content-Type', 'application/json');
 
-    const response = await fetch(fullUrl, {
-      ...options,
-      headers,
-    });
-
+    const response = await fetch(fullUrl, { ...options, headers });
     return {
       status: response.status,
       statusText: response.statusText,
@@ -188,27 +231,19 @@ ipcMain.handle('auth:make-authenticated-request', async (event, url: string, opt
         if (refreshResponse.ok) {
           const refreshData = await refreshResponse.json();
           accessToken = refreshData.access_token;
-          // Refresh Rotation: сохраняем новый refresh-токен
           await keytar.setPassword(SERVICE_NAME, ACCOUNT_NAME, refreshData.refresh_token);
-          
           onRefreshed(accessToken);
           isRefreshing = false;
-          
-          // Повторяем упавший запрос
           result = await makeRequest(accessToken);
         } else {
-          // Reuse Detection или отзыв сессии: Hard Logout
           accessToken = null;
           await keytar.deletePassword(SERVICE_NAME, ACCOUNT_NAME);
-          
-          const windows = BrowserWindow.getAllWindows();
-          windows.forEach(win => win.webContents.send('auth:forced-logout'));
-          
+          BrowserWindow.getAllWindows().forEach(win => win.webContents.send('auth:forced-logout'));
           isRefreshing = false;
           return { status: 401, error: 'Session expired or revoked' };
         }
       } catch (error) {
-        console.error('Refresh request failed:', error);
+        console.error('Refresh error:', error);
         isRefreshing = false;
         return { status: 500, error: 'Network error during refresh' };
       }
@@ -217,10 +252,7 @@ ipcMain.handle('auth:make-authenticated-request', async (event, url: string, opt
       return { status: 401, error: 'No refresh token available' };
     }
   } else if (result.status === 401 && isRefreshing) {
-    // Ставим запрос на паузу и ждем завершения обновления токена
-    const newToken = await new Promise<string>((resolve) => {
-      subscribeToRefresh(resolve);
-    });
+    const newToken = await new Promise<string>((resolve) => subscribeToRefresh(resolve));
     result = await makeRequest(newToken);
   }
 

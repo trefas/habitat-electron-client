@@ -6,6 +6,11 @@ declare global {
       getServerConfig: () => Promise<{ serverBaseUrl: string }>;
       setServerConfig: (baseUrl: string) => Promise<{ success: boolean }>;
       checkServerHealth: () => Promise<{ success: boolean; error?: string }>;
+      
+      login: (credentials: { email: string; password: string }) => Promise<{ success: boolean; user?: any; error?: string }>;
+      register: (data: { email: string; password: string; display_name: string }) => Promise<{ success: boolean; error?: string }>;
+      logout: () => Promise<{ success: boolean }>;
+      
       saveRefreshToken: (token: string) => Promise<{ success: boolean; error?: string }>;
       getRefreshToken: () => Promise<string | null>;
       clearTokens: () => Promise<{ success: boolean; error?: string }>;
