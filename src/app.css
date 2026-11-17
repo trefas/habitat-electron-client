@@ -230,3 +230,56 @@ button.secondary:hover {
   opacity: 0.6;
   cursor: not-allowed;
 }
+/* Profile Section Styles */
+.profile-section {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  background: var(--ctp-base);
+  border: 1px solid var(--ctp-surface1);
+  border-radius: 8px;
+  text-align: left;
+  width: 100%;
+  max-width: 500px;
+}
+
+.profile-section h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: var(--ctp-text);
+  font-size: 1rem;
+}
+
+.loading-text {
+  color: var(--ctp-surface2);
+  font-style: italic;
+}
+
+.error-text {
+  color: var(--ctp-red);
+  margin-bottom: 1rem;
+}
+
+.secondary-btn {
+  padding: 0.5rem 1rem;
+  background-color: var(--ctp-surface1);
+  color: var(--ctp-text);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.secondary-btn:hover {
+  background-color: var(--ctp-surface2);
+}
+
+.json-display {
+  background: var(--ctp-surface0);
+  color: var(--ctp-blue);
+  padding: 1rem;
+  border-radius: 4px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.85rem;
+  overflow-x: auto;
+  margin: 0;
+}
