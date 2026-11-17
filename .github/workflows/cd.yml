@@ -1,4 +1,4 @@
-name: Release
+name: CD
 
 on:
   push:
@@ -10,6 +10,9 @@ permissions:
 
 jobs:
   release:
+    name: Release
+    runs-on: ${{ matrix.os }}
+    
     strategy:
       matrix:
         include:
@@ -20,8 +23,6 @@ jobs:
           - os: ubuntu-latest
             platform: linux
 
-    runs-on: ${{ matrix.os }}
-    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -32,7 +33,7 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install Linux dependencies (for keytar)
+      - name: Install system dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
@@ -44,7 +45,7 @@ jobs:
       - name: Build application
         run: npm run build
 
-      - name: Package and publish
+      - name: Package with electron-builder
         run: npx electron-builder --${{ matrix.platform }} --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
