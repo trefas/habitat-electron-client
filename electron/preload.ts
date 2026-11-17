@@ -10,10 +10,8 @@ const electronAPI = {
   register: (data: { email: string; password: string; display_name: string }) => 
     ipcRenderer.invoke('auth:register', data),
   logout: () => ipcRenderer.invoke('auth:logout'),
+  restoreSession: () => ipcRenderer.invoke('auth:restore-session'),
   
-  saveRefreshToken: (token: string) => ipcRenderer.invoke('auth:save-refresh-token', token),
-  getRefreshToken: () => ipcRenderer.invoke('auth:get-refresh-token'),
-  clearTokens: () => ipcRenderer.invoke('auth:clear-tokens'),
   makeAuthenticatedRequest: (url: string, options: RequestInit) => 
     ipcRenderer.invoke('auth:make-authenticated-request', url, options),
   

@@ -1,10 +1,9 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, safeStorage } from 'electron';
 import { execFile } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import keytar from 'keytar';
 import Store from 'electron-store';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -104,12 +103,70 @@ const store = new Store({
   defaults: { serverBaseUrl: 'http://localhost:8080' },
 });
 
-const SERVICE_NAME = 'habitat-client';
-const ACCOUNT_NAME = 'refresh_token';
+const REFRESH_TOKEN_FILE = 'refresh-token.bin';
 
 let accessToken: string | null = null;
+let memoryRefreshToken: string | null = null;
 let isRefreshing = false;
 let refreshSubscribers: Array<(token: string) => void> = [];
+
+const getRefreshTokenPath = () => path.join(app.getPath('userData'), REFRESH_TOKEN_FILE);
+
+const saveRefreshToken = async (token: string): Promise<boolean> => {
+  memoryRefreshToken = token;
+
+  try {
+    if (!(await safeStorage.isAsyncEncryptionAvailable())) {
+      console.warn('Secure storage is unavailable; refresh token will only be kept in memory.');
+      return false;
+    }
+
+    const encrypted = await safeStorage.encryptStringAsync(token);
+    const tokenPath = getRefreshTokenPath();
+    await fs.promises.mkdir(path.dirname(tokenPath), { recursive: true });
+    await fs.promises.writeFile(tokenPath, encrypted, { mode: 0o600 });
+    return true;
+  } catch (error) {
+    console.warn('Failed to persist refresh token:', error);
+    return false;
+  }
+};
+
+const getRefreshToken = async (): Promise<string | null> => {
+  try {
+    const encrypted = await fs.promises.readFile(getRefreshTokenPath());
+
+    if (!(await safeStorage.isAsyncEncryptionAvailable())) {
+      return memoryRefreshToken;
+    }
+
+    const { shouldReEncrypt, result } = await safeStorage.decryptStringAsync(encrypted);
+    memoryRefreshToken = result;
+
+    if (shouldReEncrypt) {
+      await saveRefreshToken(result);
+    }
+
+    return result;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn('Failed to read refresh token:', error);
+    }
+    return memoryRefreshToken;
+  }
+};
+
+const clearRefreshToken = async (): Promise<void> => {
+  memoryRefreshToken = null;
+
+  try {
+    await fs.promises.unlink(getRefreshTokenPath());
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn('Failed to delete refresh token:', error);
+    }
+  }
+};
 
 const subscribeToRefresh = (callback: (token: string) => void) => {
   refreshSubscribers.push(callback);
@@ -162,6 +219,66 @@ const getSafeBaseUrl = (): string => {
   return typeof rawUrl === 'string' ? rawUrl : 'http://localhost:8080';
 };
 
+const fetchWithTimeout = async (url: string, options: RequestInit, timeoutMs = 5000) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+const fetchCurrentUser = async (
+  token: string,
+): Promise<{ user: any | null; status: number }> => {
+  const response = await fetchWithTimeout(`${getSafeBaseUrl()}/api/v1/me`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    return { user: null, status: response.status };
+  }
+
+  return { user: JSON.parse(JSON.stringify(await response.json())), status: response.status };
+};
+
+const refreshAccessToken = async (): Promise<boolean> => {
+  const refreshToken = await getRefreshToken();
+  if (!refreshToken) return false;
+
+  try {
+    const response = await fetchWithTimeout(`${getSafeBaseUrl()}/api/v1/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+
+    if (!response.ok) {
+      // The refresh token was rejected for good (expired or revoked).
+      if (response.status === 401 || response.status === 403) {
+        accessToken = null;
+        await clearRefreshToken();
+      }
+      return false;
+    }
+
+    const data = await response.json();
+    accessToken = data.access_token;
+
+    if (data.refresh_token) {
+      await saveRefreshToken(data.refresh_token);
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Session refresh error:', error);
+    return false;
+  }
+};
+
 // --- Server Handlers ---
 
 ipcMain.handle('server:get-config', () => ({ serverBaseUrl: getSafeBaseUrl() }));
@@ -212,7 +329,7 @@ ipcMain.handle('auth:login', async (event, credentials: { email: string; passwor
     }
 
     const data = await response.json();
-    await keytar.setPassword(SERVICE_NAME, ACCOUNT_NAME, data.refresh_token);
+    await saveRefreshToken(data.refresh_token);
     accessToken = data.access_token;
 
     // Гарантируем чистую сериализацию для IPC
@@ -246,7 +363,7 @@ ipcMain.handle('auth:register', async (event, data: { email: string; password: s
 
 ipcMain.handle('auth:logout', async () => {
   const baseUrl = getSafeBaseUrl();
-  const refreshToken = await keytar.getPassword(SERVICE_NAME, ACCOUNT_NAME);
+  const refreshToken = await getRefreshToken();
   
   if (refreshToken) {
     try {
@@ -261,35 +378,45 @@ ipcMain.handle('auth:logout', async () => {
   }
   
   accessToken = null;
-  await keytar.deletePassword(SERVICE_NAME, ACCOUNT_NAME);
+  await clearRefreshToken();
   return { success: true };
 });
 
-ipcMain.handle('auth:save-refresh-token', async (event, token: string) => {
-  try {
-    await keytar.setPassword(SERVICE_NAME, ACCOUNT_NAME, token);
-    return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
-  }
-});
+ipcMain.handle('auth:restore-session', async () => {
+  // A renderer reload keeps the main process alive, so its access token may
+  // still be valid. Validate it before falling back to the refresh token.
+  if (accessToken) {
+    try {
+      const currentUser = await fetchCurrentUser(accessToken);
+      if (currentUser.user) {
+        return { success: true, user: currentUser.user };
+      }
+      if (currentUser.status !== 401) {
+        return { success: false };
+      }
+    } catch (error) {
+      console.error('Session restore error:', error);
+      return { success: false };
+    }
 
-ipcMain.handle('auth:get-refresh-token', async () => {
+    accessToken = null;
+  }
+
+  const refreshed = await refreshAccessToken();
+  if (!refreshed || !accessToken) {
+    return { success: false };
+  }
+
   try {
-    return (await keytar.getPassword(SERVICE_NAME, ACCOUNT_NAME)) || null;
+    const currentUser = await fetchCurrentUser(accessToken);
+    if (currentUser.user) {
+      return { success: true, user: currentUser.user };
+    }
   } catch (error) {
-    return null;
+    console.error('Session restore error:', error);
   }
-});
 
-ipcMain.handle('auth:clear-tokens', async () => {
-  accessToken = null;
-  try {
-    await keytar.deletePassword(SERVICE_NAME, ACCOUNT_NAME);
-    return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
-  }
+  return { success: false };
 });
 
 ipcMain.handle('auth:make-authenticated-request', async (event, url: string, options: RequestInit) => {
@@ -313,7 +440,7 @@ ipcMain.handle('auth:make-authenticated-request', async (event, url: string, opt
 
   if (result.status === 401 && !isRefreshing) {
     isRefreshing = true;
-    const refreshToken = await keytar.getPassword(SERVICE_NAME, ACCOUNT_NAME);
+    const refreshToken = await getRefreshToken();
     
     if (refreshToken) {
       try {
@@ -326,13 +453,15 @@ ipcMain.handle('auth:make-authenticated-request', async (event, url: string, opt
         if (refreshResponse.ok) {
           const refreshData = await refreshResponse.json();
           accessToken = refreshData.access_token;
-          await keytar.setPassword(SERVICE_NAME, ACCOUNT_NAME, refreshData.refresh_token);
+          if (refreshData.refresh_token) {
+            await saveRefreshToken(refreshData.refresh_token);
+          }
           onRefreshed(accessToken);
           isRefreshing = false;
           result = await makeRequest(accessToken);
         } else {
           accessToken = null;
-          await keytar.deletePassword(SERVICE_NAME, ACCOUNT_NAME);
+          await clearRefreshToken();
           BrowserWindow.getAllWindows().forEach(win => win.webContents.send('auth:forced-logout'));
           isRefreshing = false;
           return { status: 401, error: 'Session expired or revoked' };

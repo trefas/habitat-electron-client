@@ -10,10 +10,8 @@ declare global {
       login: (credentials: { email: string; password: string }) => Promise<{ success: boolean; user?: any; error?: string }>;
       register: (data: { email: string; password: string; display_name: string }) => Promise<{ success: boolean; error?: string }>;
       logout: () => Promise<{ success: boolean }>;
+      restoreSession: () => Promise<{ success: boolean; user?: any }>;
       
-      saveRefreshToken: (token: string) => Promise<{ success: boolean; error?: string }>;
-      getRefreshToken: () => Promise<string | null>;
-      clearTokens: () => Promise<{ success: boolean; error?: string }>;
       makeAuthenticatedRequest: (url: string, options: RequestInit) => Promise<any>;
       onForcedLogout: (callback: () => void) => () => void;
     };

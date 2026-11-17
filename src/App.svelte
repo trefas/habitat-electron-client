@@ -12,7 +12,7 @@
   let showSettings = false;
   let currentUser: any = null;
 
-  const checkHealth = async () => {
+  const checkHealth = async (restoreSession = false) => {
     view = 'checking';
     if (!window.electronAPI) {
       errorMessage = 'Ошибка инициализации Electron API';
@@ -21,26 +21,36 @@
     }
     try {
       const result = await window.electronAPI.checkServerHealth();
-      if (result.success) {
-        view = 'login';
-      } else {
+      if (!result.success) {
         view = 'unavailable';
         errorMessage = result.error || 'Неизвестная ошибка';
+        return;
       }
+
+      if (restoreSession) {
+        const session = await window.electronAPI.restoreSession();
+        if (session?.success && session.user) {
+          currentUser = session.user;
+          view = 'welcome';
+          return;
+        }
+      }
+
+      view = 'login';
     } catch (error) {
       view = 'unavailable';
       errorMessage = 'Критическая ошибка IPC';
     }
   };
 
-  onMount(() => { 
-    checkHealth(); 
+  onMount(() => {
+    checkHealth(true);
   });
 
   const handleSaveSettings = async (baseUrl: string) => {
     await window.electronAPI.setServerConfig(baseUrl);
     showSettings = false;
-    await checkHealth();
+    await checkHealth(true);
   };
 
   // ИСПРАВЛЕНИЕ ЗДЕСЬ: извлекаем данные из event.detail
@@ -63,7 +73,7 @@
     <h1 style="color: var(--ctp-red)">Сервер недоступен</h1>
     <p>Ошибка: {errorMessage}</p>
     <div class="buttons">
-      <button on:click={checkHealth}>Обновить</button>
+      <button on:click={() => checkHealth(true)}>Обновить</button>
       <button class="secondary" on:click={() => showSettings = true}>Настроить</button>
     </div>
   {:else if view === 'login'}
