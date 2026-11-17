@@ -7,7 +7,8 @@ dist-ssr/
 # Electron build output
 dist-electron/
 release/
-build/
+
+# build/ contains buildResources (icons) and must stay tracked
 
 # Vite
 *.local
