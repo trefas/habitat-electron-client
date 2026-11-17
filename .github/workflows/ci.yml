@@ -18,7 +18,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install system dependencies
@@ -37,4 +37,4 @@ jobs:
         with:
           name: build-output
           path: dist/
-          retention-days: 7
+          retention-days: 1
