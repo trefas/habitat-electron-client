@@ -3,11 +3,13 @@ export {};
 declare global {
   interface Window {
     electronAPI: {
-      checkServerHealth: (url: string) => Promise<{ success: boolean; error?: string }>;
-      saveRefreshToken: (token: string) => Promise<void>;
+      getServerConfig: () => Promise<{ serverBaseUrl: string }>;
+      setServerConfig: (baseUrl: string) => Promise<{ success: boolean }>;
+      checkServerHealth: () => Promise<{ success: boolean; error?: string }>;
+      saveRefreshToken: (token: string) => Promise<{ success: boolean; error?: string }>;
       getRefreshToken: () => Promise<string | null>;
-      clearTokens: () => Promise<void>;
-      makeAuthenticatedRequest: (url: string, options: RequestInit) => Promise<Response>;
+      clearTokens: () => Promise<{ success: boolean; error?: string }>;
+      makeAuthenticatedRequest: (url: string, options: RequestInit) => Promise<any>;
       onForcedLogout: (callback: () => void) => () => void;
     };
   }

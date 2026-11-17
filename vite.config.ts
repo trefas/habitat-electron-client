@@ -8,16 +8,17 @@ export default defineConfig({
     svelte(),
     electron([
       {
-        // Main process entry
         entry: 'electron/main.ts',
         vite: {
           build: {
             outDir: 'dist-electron',
+            rollupOptions: {
+              external: ['keytar', 'electron-store'],
+            },
           },
         },
       },
       {
-        // Preload script entry
         entry: 'electron/preload.ts',
         onstart(options) {
           options.reload();
@@ -25,6 +26,16 @@ export default defineConfig({
         vite: {
           build: {
             outDir: 'dist-electron',
+            rollupOptions: {
+              // Массив переопределяет настройки по умолчанию и гарантирует CJS
+              output: [
+                {
+                  format: 'cjs',
+                  entryFileNames: 'preload.js',
+                  chunkFileNames: '[name].js',
+                },
+              ],
+            },
           },
         },
       },

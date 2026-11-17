@@ -4,6 +4,9 @@ node_modules/
 # Build output
 dist/
 dist-ssr/
+# Electron build output
+dist-electron/
+release/
 
 # Vite
 *.local

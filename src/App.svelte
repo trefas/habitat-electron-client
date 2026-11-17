@@ -1,89 +1,72 @@
-<script>
-  import svelteLogo from './assets/svelte.svg'
-  import viteLogo from './assets/vite.svg'
-  import heroImg from './assets/hero.png'
-  import Counter from './lib/Counter.svelte'
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import './app.css';
+  import SettingsModal from './lib/SettingsModal.svelte';
+
+  let serverStatus: 'checking' | 'available' | 'unavailable' = 'checking';
+  let errorMessage = '';
+  let showSettings = false;
+
+  const checkHealth = async () => {
+    console.log('[Renderer] Функция checkHealth вызвана');
+    serverStatus = 'checking';
+    
+    if (!window.electronAPI) {
+      console.error('[Renderer] ОШИБКА: window.electronAPI НЕ НАЙДЕН!');
+      errorMessage = 'Ошибка инициализации Electron API';
+      serverStatus = 'unavailable';
+      return;
+    }
+
+    console.log('[Renderer] Отправляю IPC-запрос на проверку здоровья...');
+    
+    try {
+      const result = await window.electronAPI.checkServerHealth();
+      console.log('[Renderer] Получен ответ от Main процесса:', result);
+
+      if (result.success) {
+        serverStatus = 'available';
+      } else {
+        serverStatus = 'unavailable';
+        errorMessage = result.error || 'Неизвестная ошибка';
+      }
+    } catch (error) {
+      console.error('[Renderer] Исключение при вызове checkServerHealth:', error);
+      serverStatus = 'unavailable';
+      errorMessage = 'Критическая ошибка IPC';
+    }
+  };
+
+  onMount(() => {
+    console.log('[Renderer] App.svelte смонтирован, вызываю checkHealth');
+    checkHealth();
+  });
+
+  const handleSaveSettings = async (baseUrl: string) => {
+    await window.electronAPI.setServerConfig(baseUrl);
+    showSettings = false;
+    await checkHealth();
+  };
 </script>
 
-<section id="center">
-  <div class="hero">
-    <img src={heroImg} class="base" width="170" height="179" alt="" />
-    <img src={svelteLogo} class="framework" alt="Svelte logo" />
-    <img src={viteLogo} class="vite" alt="Vite logo" />
-  </div>
-  <div>
-    <h1>Get started</h1>
-    <p>Edit <code>src/App.svelte</code> and save to test <code>HMR</code></p>
-  </div>
-  <Counter />
-</section>
+<main>
+  {#if serverStatus === 'checking'}
+    <h1>Проверка подключения к серверу...</h1>
+    <p>Пожалуйста, подождите.</p>
+  {:else if serverStatus === 'available'}
+    <h1 style="color: var(--ctp-green)">Сервер доступен</h1>
+    <p>Переход к форме авторизации...</p>
+    <p style="color: var(--ctp-surface2); font-size: 0.9rem;">(Будет реализовано на следующем шаге)</p>
+  {:else}
+    <h1 style="color: var(--ctp-red)">Сервер недоступен</h1>
+    <p>Ошибка: {errorMessage}</p>
+    <div class="buttons">
+      <button on:click={checkHealth}>Обновить</button>
+      <button class="secondary" on:click={() => showSettings = true}>Настроить</button>
+    </div>
+  {/if}
+</main>
 
-<div class="ticks"></div>
-
-<section id="next-steps">
-  <div id="docs">
-    <svg class="icon" role="presentation" aria-hidden="true">
-      <use href="/icons.svg#documentation-icon"></use>
-    </svg>
-    <h2>Documentation</h2>
-    <p>Your questions, answered</p>
-    <ul>
-      <li>
-        <a href="https://vite.dev/" target="_blank" rel="noreferrer">
-          <img class="logo" src={viteLogo} alt="" />
-          Explore Vite
-        </a>
-      </li>
-      <li>
-        <a href="https://svelte.dev/" target="_blank" rel="noreferrer">
-          <img class="button-icon" src={svelteLogo} alt="" />
-          Learn more
-        </a>
-      </li>
-    </ul>
-  </div>
-  <div id="social">
-    <svg class="icon" role="presentation" aria-hidden="true">
-      <use href="/icons.svg#social-icon"></use>
-    </svg>
-    <h2>Connect with us</h2>
-    <p>Join the Vite community</p>
-    <ul>
-      <li>
-        <a href="https://github.com/vitejs/vite" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#github-icon"></use>
-          </svg>
-          GitHub
-        </a>
-      </li>
-      <li>
-        <a href="https://chat.vite.dev/" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#discord-icon"></use>
-          </svg>
-          Discord
-        </a>
-      </li>
-      <li>
-        <a href="https://x.com/vite_js" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#x-icon"></use>
-          </svg>
-          X.com
-        </a>
-      </li>
-      <li>
-        <a href="https://bsky.app/profile/vite.dev" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#bluesky-icon"></use>
-          </svg>
-          Bluesky
-        </a>
-      </li>
-    </ul>
-  </div>
-</section>
-
-<div class="ticks"></div>
-<section id="spacer"></section>
+{#if showSettings}
+  <SettingsModal on:save={handleSaveSettings} on:cancel={() => showSettings = false} />
+{/if}
