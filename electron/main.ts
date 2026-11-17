@@ -1,4 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
+import { execFile } from 'child_process';
+import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import keytar from 'keytar';
@@ -6,6 +9,95 @@ import Store from 'electron-store';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const LINUX_DESKTOP_FILE = 'com.habitat.client.desktop';
+const LINUX_APP_ID = 'com.habitat.client';
+const LINUX_ICON_NAME = 'habitat-client';
+
+// Packaged builds get build/icon.png via electron-builder extraResources.
+const appIconPath = app.isPackaged
+  ? path.join(process.resourcesPath, 'icon.png')
+  : path.join(__dirname, '../build/icon.png');
+
+/**
+ * GNOME (especially on Wayland) resolves an application's icon through its
+ * .desktop file, not through the window itself. AppImages launched directly
+ * are not integrated, so install a per-user desktop entry and icon on first
+ * run. Deb/rpm packages already install these system-wide and skip this path.
+ */
+const setupLinuxDesktopIntegration = () => {
+  const appImagePath = process.env.APPIMAGE;
+  if (!appImagePath) return;
+
+  const dataHome = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
+  const applicationsDir = path.join(dataHome, 'applications');
+  const desktopFilePath = path.join(applicationsDir, LINUX_DESKTOP_FILE);
+
+  const systemDataDirs = (process.env.XDG_DATA_DIRS || '/usr/local/share:/usr/share')
+    .split(':')
+    .filter(Boolean);
+
+  if (systemDataDirs.some((dir) => fs.existsSync(path.join(dir, 'applications', LINUX_DESKTOP_FILE)))) {
+    return;
+  }
+
+  // Escape characters that have special meaning inside a quoted Exec value.
+  const execArg = appImagePath.replace(/([\\`"$])/g, '\\$1');
+  const desktopEntry = [
+    '[Desktop Entry]',
+    'Type=Application',
+    'Name=Habitat Client',
+    'Comment=Desktop client for Habitat backend',
+    `Exec="${execArg}" %U`,
+    `Icon=${LINUX_ICON_NAME}`,
+    'Terminal=false',
+    'Categories=Utility;',
+    `StartupWMClass=${LINUX_APP_ID}`,
+    `X-AppImage-Version=${app.getVersion()}`,
+    '',
+  ].join('\n');
+
+  const iconThemeDir = path.join(dataHome, 'icons', 'hicolor');
+  const iconSizes = [16, 32, 48, 64, 128, 256, 512, 1024];
+
+  try {
+    fs.mkdirSync(applicationsDir, { recursive: true });
+
+    let currentEntry = '';
+    try {
+      currentEntry = fs.readFileSync(desktopFilePath, 'utf8');
+    } catch {
+      // File does not exist yet.
+    }
+
+    if (currentEntry !== desktopEntry) {
+      fs.writeFileSync(desktopFilePath, desktopEntry, { mode: 0o644 });
+    }
+
+    let iconsChanged = false;
+    for (const size of iconSizes) {
+      const iconSource = path.join(process.resourcesPath, 'icons', `${size}x${size}.png`);
+      if (!fs.existsSync(iconSource)) continue;
+
+      const iconTarget = path.join(iconThemeDir, `${size}x${size}`, 'apps', `${LINUX_ICON_NAME}.png`);
+      const iconUpToDate = fs.existsSync(iconTarget)
+        && fs.statSync(iconTarget).size === fs.statSync(iconSource).size;
+
+      if (iconUpToDate) continue;
+
+      fs.mkdirSync(path.dirname(iconTarget), { recursive: true });
+      fs.copyFileSync(iconSource, iconTarget);
+      iconsChanged = true;
+    }
+
+    if (iconsChanged) {
+      // GTK-based desktops pick up new user icons more reliably with a cache.
+      execFile('gtk-update-icon-cache', ['-f', '-t', iconThemeDir], () => {});
+    }
+  } catch (error) {
+    console.warn('Failed to install AppImage desktop entry:', error);
+  }
+};
 
 const store = new Store({
   name: 'habitat-config',
@@ -30,12 +122,15 @@ const onRefreshed = (token: string) => {
 
 if (process.platform === 'linux') {
   app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
+  app.setDesktopName(LINUX_DESKTOP_FILE);
+  setupLinuxDesktopIntegration();
 }
 
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    icon: fs.existsSync(appIconPath) ? appIconPath : undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
