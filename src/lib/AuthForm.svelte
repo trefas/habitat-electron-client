@@ -3,6 +3,8 @@
 
   const dispatch = createEventDispatcher();
 
+  export let notice = '';
+
   let isLogin = true;
   let email = '';
   let password = '';
@@ -44,6 +46,10 @@
 <div class="auth-container">
   <h2>{isLogin ? 'Вход в систему' : 'Регистрация'}</h2>
   
+  {#if notice}
+    <p class="info-message">{notice}</p>
+  {/if}
+
   {#if errorMessage}
     <p class="error-message">{errorMessage}</p>
   {/if}
@@ -63,7 +69,15 @@
 
     <div class="form-group">
       <label for="password">Пароль</label>
-      <input id="password" type="password" bind:value={password} required minlength="6" />
+      <input
+        id="password"
+        type="password"
+        bind:value={password}
+        required
+        minlength="8"
+        maxlength="72"
+        autocomplete={isLogin ? 'current-password' : 'new-password'}
+      />
     </div>
 
     <button type="submit" class="primary-btn" disabled={isLoading}>

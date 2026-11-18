@@ -1,70 +1,104 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
-  import { api } from '../lib/api';
+  import { api } from './api';
+  import type { User } from './types';
 
   const dispatch = createEventDispatcher();
-  export let user: any;
-  
-  let isLoading = false;
-  let isFetchingProfile = true;
-  let profileData: any = null;
-  let fetchError = '';
 
-  const fetchProfile = async () => {
-    isFetchingProfile = true;
-    fetchError = '';
+  export let user: User;
+
+  let profile: User = user;
+  let isLoading = true;
+  let loadError = '';
+
+  const loadProfile = async () => {
+    isLoading = true;
+    loadError = '';
+
     try {
-      // Этот запрос автоматически получит заголовок Authorization из Main процесса
-      // Если токен протух, Main процесс сам выполнит refresh и повторит запрос
-      const data = await api.get('/api/v1/me');
-      profileData = data;
+      profile = await api.get('/api/v1/me');
+      dispatch('userUpdated', profile);
     } catch (error: any) {
-      console.error('Failed to fetch profile:', error);
-      fetchError = error.message || 'Не удалось загрузить данные профиля';
+      loadError = error.message || 'Не удалось загрузить данные профиля';
     } finally {
-      isFetchingProfile = false;
+      isLoading = false;
     }
   };
 
-  const handleLogout = async () => {
-    isLoading = true;
-    await window.electronAPI.logout();
-    dispatch('logout');
-    isLoading = false;
+  const formatDate = (value?: string | null) =>
+    value ? new Date(value).toLocaleString('ru-RU') : '—';
+
+  const roleLabel = (role?: string) =>
+    role === 'admin' ? 'Администратор' : 'Пользователь';
+
+  const statusLabel = (status?: string) => {
+    switch (status) {
+      case 'active':
+        return 'Активен';
+      case 'pending':
+        return 'Ожидает активации';
+      case 'blocked':
+        return 'Заблокирован';
+      default:
+        return status || '—';
+    }
   };
 
-  onMount(() => {
-    // Подписываемся на принудительный выход (Reuse Detection)
-    const unsubscribe = window.electronAPI.onForcedLogout(() => {
-      alert('Сессия была завершена на сервере (обнаружено повторное использование токена или отзыв).');
-      handleLogout();
-    });
+  const statusClass = (status?: string) =>
+    status === 'active' ? 'badge-active' : status === 'blocked' ? 'badge-blocked' : 'badge-pending';
 
-    fetchProfile();
-
-    return () => {
-      unsubscribe();
-    };
-  });
+  onMount(loadProfile);
 </script>
 
-<div class="welcome-container">
-  <h1>Добро пожаловать, {user?.display_name || user?.email}!</h1>
-  <p>Вы успешно авторизовались в системе Habitat.</p>
-  
-  <div class="profile-section">
-    <h3>Данные профиля (защищенный эндпоинт /api/v1/me)</h3>
-    {#if isFetchingProfile}
-      <p class="loading-text">Загрузка данных...</p>
-    {:else if fetchError}
-      <p class="error-text">{fetchError}</p>
-      <button class="secondary-btn" on:click={fetchProfile}>Повторить</button>
-    {:else if profileData}
-      <pre class="json-display">{JSON.stringify(profileData, null, 2)}</pre>
-    {/if}
-  </div>
+<div class="page-container">
+  <header class="page-header">
+    <div>
+      <h1>Добро пожаловать, {profile.display_name || profile.email}!</h1>
+      <p class="page-subtitle">Вы успешно вошли в Habitat Client.</p>
+    </div>
+    <div class="page-actions">
+      <button class="secondary" on:click={() => dispatch('profile')}>Профиль</button>
+      <button class="logout-btn" on:click={() => dispatch('logout')}>Выйти</button>
+    </div>
+  </header>
 
-  <button class="logout-btn" on:click={handleLogout} disabled={isLoading}>
-    {isLoading ? 'Выход...' : 'Выйти'}
-  </button>
+  <section class="card">
+    <div class="card-header">
+      <h2>Учётная запись</h2>
+      <button class="secondary small-btn" on:click={loadProfile} disabled={isLoading}>
+        {isLoading ? 'Обновление...' : 'Обновить'}
+      </button>
+    </div>
+
+    {#if loadError}
+      <p class="error-text">{loadError}</p>
+    {/if}
+
+    <dl class="details-grid">
+      <div>
+        <dt>Email</dt>
+        <dd>{profile.email}</dd>
+      </div>
+      <div>
+        <dt>Имя</dt>
+        <dd>{profile.display_name || '—'}</dd>
+      </div>
+      <div>
+        <dt>Роль</dt>
+        <dd>{roleLabel(profile.role)}</dd>
+      </div>
+      <div>
+        <dt>Статус</dt>
+        <dd><span class="badge {statusClass(profile.status)}">{statusLabel(profile.status)}</span></dd>
+      </div>
+      <div>
+        <dt>Дата регистрации</dt>
+        <dd>{formatDate(profile.created_at)}</dd>
+      </div>
+      <div>
+        <dt>Последний вход</dt>
+        <dd>{formatDate(profile.last_login_at)}</dd>
+      </div>
+    </dl>
+  </section>
 </div>

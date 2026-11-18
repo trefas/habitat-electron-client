@@ -4,13 +4,27 @@
   import SettingsModal from './lib/SettingsModal.svelte';
   import AuthForm from './lib/AuthForm.svelte';
   import WelcomeScreen from './lib/WelcomeScreen.svelte';
+  import AdminPanel from './lib/AdminPanel.svelte';
+  import ProfilePage from './lib/ProfilePage.svelte';
+  import type { User } from './lib/types';
 
-  type ViewState = 'checking' | 'unavailable' | 'login' | 'welcome';
-  
+  type MainView = 'welcome' | 'admin' | 'profile';
+  type ViewState = 'checking' | 'unavailable' | 'login' | MainView;
+
   let view: ViewState = 'checking';
   let errorMessage = '';
   let showSettings = false;
-  let currentUser: any = null;
+  let currentUser: User | null = null;
+  let loginNotice = '';
+  let previousView: 'welcome' | 'admin' = 'welcome';
+
+  const isCentered = () => view === 'checking' || view === 'unavailable' || view === 'login';
+
+  const openSession = (user: User) => {
+    currentUser = user;
+    loginNotice = '';
+    view = user.role === 'admin' ? 'admin' : 'welcome';
+  };
 
   const checkHealth = async (restoreSession = false) => {
     view = 'checking';
@@ -30,12 +44,12 @@
       if (restoreSession) {
         const session = await window.electronAPI.restoreSession();
         if (session?.success && session.user) {
-          currentUser = session.user;
-          view = 'welcome';
+          openSession(session.user);
           return;
         }
       }
 
+      currentUser = null;
       view = 'login';
     } catch (error) {
       view = 'unavailable';
@@ -45,6 +59,15 @@
 
   onMount(() => {
     checkHealth(true);
+
+    // Централизованно реагируем на отзыв сессии сервером.
+    const unsubscribe = window.electronAPI.onForcedLogout(() => {
+      currentUser = null;
+      loginNotice = 'Сессия была завершена на сервере. Войдите снова.';
+      view = 'login';
+    });
+
+    return unsubscribe;
   });
 
   const handleSaveSettings = async (baseUrl: string) => {
@@ -53,19 +76,37 @@
     await checkHealth(true);
   };
 
-  // ИСПРАВЛЕНИЕ ЗДЕСЬ: извлекаем данные из event.detail
-  const handleAuthSuccess = (event: CustomEvent) => {
-    currentUser = event.detail;
-    view = 'welcome';
+  const handleAuthSuccess = (event: CustomEvent<User>) => {
+    openSession(event.detail);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async (event?: CustomEvent<{ notice?: string }>) => {
+    const notice = event?.detail?.notice || '';
+    try {
+      await window.electronAPI.logout();
+    } catch (error) {
+      // Локальные токены всё равно нужно очистить.
+    }
     currentUser = null;
+    loginNotice = notice;
     view = 'login';
+  };
+
+  const handleOpenProfile = () => {
+    previousView = view === 'admin' ? 'admin' : 'welcome';
+    view = 'profile';
+  };
+
+  const handleProfileBack = () => {
+    view = previousView;
+  };
+
+  const handleUserUpdated = (event: CustomEvent<User>) => {
+    currentUser = event.detail;
   };
 </script>
 
-<main>
+<main class:centered={isCentered()}>
   {#if view === 'checking'}
     <h1>Проверка подключения к серверу...</h1>
     <p>Пожалуйста, подождите.</p>
@@ -77,9 +118,28 @@
       <button class="secondary" on:click={() => showSettings = true}>Настроить</button>
     </div>
   {:else if view === 'login'}
-    <AuthForm on:success={handleAuthSuccess} />
-  {:else if view === 'welcome'}
-    <WelcomeScreen user={currentUser} on:logout={handleLogout} />
+    <AuthForm notice={loginNotice} on:success={handleAuthSuccess} />
+  {:else if view === 'welcome' && currentUser}
+    <WelcomeScreen
+      user={currentUser}
+      on:logout={handleLogout}
+      on:profile={handleOpenProfile}
+      on:userUpdated={handleUserUpdated}
+    />
+  {:else if view === 'admin' && currentUser}
+    <AdminPanel
+      user={currentUser}
+      on:logout={handleLogout}
+      on:profile={handleOpenProfile}
+      on:userUpdated={handleUserUpdated}
+    />
+  {:else if view === 'profile' && currentUser}
+    <ProfilePage
+      user={currentUser}
+      on:back={handleProfileBack}
+      on:logout={handleLogout}
+      on:userUpdated={handleUserUpdated}
+    />
   {/if}
 </main>
 

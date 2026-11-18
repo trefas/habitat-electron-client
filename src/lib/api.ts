@@ -38,6 +38,13 @@ export const api = {
       method: 'PUT', 
       body: body ? JSON.stringify(body) : undefined 
     }),
+
+  patch: (url: string, body?: any, options?: RequestInit) =>
+    apiRequest(url, {
+      ...options,
+      method: 'PATCH',
+      body: body ? JSON.stringify(body) : undefined
+    }),
     
   delete: (url: string, options?: RequestInit) => 
     apiRequest(url, { ...options, method: 'DELETE' }),

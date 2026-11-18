@@ -1,47 +1,149 @@
-# Svelte + TS + Vite
+# Habitat Client
 
-This template should help get you started developing with Svelte and TypeScript in Vite.
+Настольное приложение (Electron) для работы с сервером **Habitat**: вход в учётную
+запись, просмотр личных данных, смена пароля и имени, а для администраторов —
+управление пользователями.
 
-## Recommended IDE Setup
+Приложение распространяется для Linux в виде AppImage, `.deb` и `.rpm` пакетов.
 
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
+## Возможности
 
-## Need an official Svelte framework?
+- Вход и регистрация в учётной записи Habitat.
+- Восстановление сессии после перезапуска приложения — повторно вводить пароль
+  не нужно, пока сессия действительна на сервере.
+- Приветственная страница с данными учётной записи: email, имя, роль, статус,
+  дата регистрации и последний вход.
+- Личный профиль: смена отображаемого имени и пароля. Email изменить нельзя.
+- Админ-панель (только для роли «Администратор»): поиск и фильтрация
+  пользователей, смена имени, роли и статуса, удаление учётных записей.
+- Настройка адреса сервера Habitat.
 
-Check out [SvelteKit](https://github.com/sveltejs/kit#readme), which is also powered by Vite. Deploy anywhere with its serverless-first approach and adapt to various platforms, with out of the box support for TypeScript, SCSS, and Less, and easily-added support for mdsvex, GraphQL, PostCSS, Tailwind CSS, and more.
+## Установка
 
-## Technical considerations
+Скачайте нужный файл со страницы
+[Releases](https://github.com/trefas/habitat-electron-client/releases).
 
-**Why use this over SvelteKit?**
+### AppImage
 
-- It brings its own routing solution which might not be preferable for some users.
-- It is first and foremost a framework that just happens to use Vite under the hood, not a Vite app.
-
-This template contains as little as possible to get started with Vite + TypeScript + Svelte, while taking into account the developer experience with regards to HMR and intellisense. It demonstrates capabilities on par with the other `create-vite` templates and is a good starting point for beginners dipping their toes into a Vite + Svelte project.
-
-Should you later need the extended capabilities and extensibility provided by SvelteKit, the template has been structured similarly to SvelteKit so that it is easy to migrate.
-
-**Why `global.d.ts` instead of `compilerOptions.types` inside `jsconfig.json` or `tsconfig.json`?**
-
-Setting `compilerOptions.types` shuts out all other types not explicitly listed in the configuration. Using triple-slash references keeps the default TypeScript setting of accepting type information from the entire workspace, while also adding `svelte` and `vite/client` type information.
-
-**Why include `.vscode/extensions.json`?**
-
-Other templates indirectly recommend extensions via the README, but this file allows VS Code to prompt the user to install the recommended extension upon opening the project.
-
-**Why enable `allowJs` in the TS template?**
-
-While `allowJs: false` would indeed prevent the use of `.js` files in the project, it does not prevent the use of JavaScript syntax in `.svelte` files. In addition, it would force `checkJs: false`, bringing the worst of both worlds: not being able to guarantee the entire codebase is TypeScript, and also having worse typechecking for the existing JavaScript. In addition, there are valid use cases in which a mixed codebase may be relevant.
-
-**Why is HMR not preserving my local component state?**
-
-HMR state preservation comes with a number of gotchas! It has been disabled by default in both `svelte-hmr` and `@sveltejs/vite-plugin-svelte` due to its often surprising behavior. You can read the details [here](https://github.com/rixo/svelte-hmr#svelte-hmr).
-
-If you have state that's important to retain within a component, consider creating an external store which would not be replaced by HMR.
-
-```ts
-// store.ts
-// An extremely simple external store
-import { writable } from 'svelte/store'
-export default writable(0)
+```bash
+chmod +x habitat-client-<версия>-x86_64.AppImage
+./habitat-client-<версия>-x86_64.AppImage
 ```
+
+При первом запуске AppImage само создаёт ярлык и иконку в меню приложений
+(`~/.local/share/applications`). Если ярлык не появился, запустите приложение
+ещё раз или установите `.deb`/`.rpm`.
+
+### Debian / Ubuntu (`.deb`)
+
+```bash
+sudo apt install ./habitat-client-<версия>-amd64.deb
+```
+
+### Fedora / openSUSE (`.rpm`)
+
+```bash
+sudo rpm -i habitat-client-<версия>-x86_64.rpm
+```
+
+После установки приложение запускается из меню как **Habitat Client**.
+
+## Первый запуск
+
+По умолчанию приложение подключается к серверу `http://localhost:8080`.
+
+Если сервер находится по другому адресу:
+
+1. Запустите приложение. Если подключиться не удалось, появится экран
+   «Сервер недоступен».
+2. Нажмите **Настроить**.
+3. Укажите протокол (`http` или `https`), хост (домен или IP) и порт.
+4. Нажмите **Сохранить** — приложение проверит подключение.
+
+Адрес сервера сохраняется локально и используется при следующих запусках.
+
+## Вход и регистрация
+
+- Введите email и пароль и нажмите **Войти**.
+- Если учётной записи ещё нет, нажмите **Зарегистрироваться**, укажите имя,
+  email и пароль. После регистрации войдите с этими данными.
+
+Пароль должен содержать от 8 до 72 символов.
+
+## Приветственная страница
+
+После входа обычный пользователь попадает на приветственную страницу. На ней
+показаны данные учётной записи и две кнопки:
+
+- **Профиль** — переход к редактированию имени и смене пароля;
+- **Выйти** — завершение сессии на этом устройстве.
+
+## Профиль
+
+Страница профиля доступна всем пользователям: и с приветственной страницы, и из
+админ-панели.
+
+- **Имя** — можно изменить и сохранить. Email показан только для чтения.
+- **Пароль** — введите текущий пароль, новый пароль и его повторение.
+
+После смены пароля сервер завершает все активные сессии, поэтому приложение
+автоматически выходит и просит войти заново — уже с новым паролем. Это ожидаемое
+поведение, а не ошибка.
+
+## Админ-панель
+
+Пользователи с ролью **Администратор** после входа сразу попадают в
+админ-панель. Возможности:
+
+- поиск по email или имени;
+- фильтры по роли и статусу;
+- выбор количества строк на странице и постраничная навигация;
+- изменение имени, роли и статуса пользователя;
+- удаление пользователя (действие необратимо).
+
+Ограничения:
+
+- нельзя изменить собственную роль и статус;
+- нельзя удалить собственную учётную запись;
+- сервер не позволит понизить или заблокировать последнего активного
+  администратора.
+
+## Хранение данных
+
+- Настройки подключения хранятся в конфигурации приложения (`electron-store`).
+- Refresh-токен сохраняется в зашифрованном виде средствами системы
+  (`safeStorage`: GNOME Keyring, KWallet и т. п.). Если системное хранилище
+  недоступно, токен остаётся только в памяти — после перезапуска приложение
+  попросит войти снова.
+- Пароль приложение не сохраняет.
+
+## Частые проблемы
+
+**«Сервер недоступен»**
+
+Проверьте, что сервер Habitat запущен и доступен по указанному адресу и порту.
+Убедитесь, что выбран правильный протокол (`http`/`https`). При необходимости
+нажмите **Настроить** и измените адрес.
+
+**После перезапуска снова просит пароль**
+
+Сессия истекла либо системное хранилище секретов недоступно. Войдите заново.
+
+**После смены пароля приложение вышло**
+
+Так и должно быть: сервер отзывает все сессии. Войдите с новым паролем.
+
+**Нет доступа к админ-панели**
+
+Админ-панель видна только пользователям с ролью «Администратор». Роль назначает
+администратор через панель управления.
+
+## Полезные ссылки
+
+- [Релизы и установочные файлы](https://github.com/trefas/habitat-electron-client/releases)
+- [Сообщить об ошибке](https://github.com/trefas/habitat-electron-client/issues)
+- [Документация для контрибьюторов](CONTRIBUTING.md)
+
+## Лицензия
+
+Проект распространяется по лицензии MIT. Подробности — в файле [LICENSE](LICENSE).

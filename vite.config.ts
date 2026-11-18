@@ -13,7 +13,7 @@ export default defineConfig({
           build: {
             outDir: 'dist-electron',
             rollupOptions: {
-              external: ['keytar', 'electron-store'],
+              external: ['electron-store'],
             },
           },
         },
