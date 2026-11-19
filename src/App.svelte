@@ -6,9 +6,10 @@
   import WelcomeScreen from './lib/WelcomeScreen.svelte';
   import AdminPanel from './lib/AdminPanel.svelte';
   import ProfilePage from './lib/ProfilePage.svelte';
+  import MessagesPage from './lib/MessagesPage.svelte';
   import type { User } from './lib/types';
 
-  type MainView = 'welcome' | 'admin' | 'profile';
+  type MainView = 'welcome' | 'admin' | 'profile' | 'messages';
   type ViewState = 'checking' | 'unavailable' | 'login' | MainView;
 
   let view: ViewState = 'checking';
@@ -17,6 +18,7 @@
   let currentUser: User | null = null;
   let loginNotice = '';
   let previousView: 'welcome' | 'admin' = 'welcome';
+  let messagesReturnView: 'welcome' | 'admin' = 'welcome';
 
   const isCentered = () => view === 'checking' || view === 'unavailable' || view === 'login';
 
@@ -101,6 +103,15 @@
     view = previousView;
   };
 
+  const handleOpenMessages = () => {
+    messagesReturnView = view === 'admin' ? 'admin' : 'welcome';
+    view = 'messages';
+  };
+
+  const handleMessagesBack = () => {
+    view = messagesReturnView;
+  };
+
   const handleUserUpdated = (event: CustomEvent<User>) => {
     currentUser = event.detail;
   };
@@ -124,6 +135,7 @@
       user={currentUser}
       on:logout={handleLogout}
       on:profile={handleOpenProfile}
+      on:messages={handleOpenMessages}
       on:userUpdated={handleUserUpdated}
     />
   {:else if view === 'admin' && currentUser}
@@ -131,8 +143,11 @@
       user={currentUser}
       on:logout={handleLogout}
       on:profile={handleOpenProfile}
+      on:messages={handleOpenMessages}
       on:userUpdated={handleUserUpdated}
     />
+  {:else if view === 'messages' && currentUser}
+    <MessagesPage on:back={handleMessagesBack} on:logout={handleLogout} />
   {:else if view === 'profile' && currentUser}
     <ProfilePage
       user={currentUser}

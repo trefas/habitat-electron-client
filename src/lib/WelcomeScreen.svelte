@@ -57,6 +57,7 @@
       <p class="page-subtitle">Вы успешно вошли в Habitat Client.</p>
     </div>
     <div class="page-actions">
+      <button class="secondary" on:click={() => dispatch('messages')}>Сообщения</button>
       <button class="secondary" on:click={() => dispatch('profile')}>Профиль</button>
       <button class="logout-btn" on:click={() => dispatch('logout')}>Выйти</button>
     </div>
