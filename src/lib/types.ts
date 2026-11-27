@@ -79,3 +79,44 @@ export interface NotificationListResponse {
   limit: number;
   offset: number;
 }
+
+export interface ListItem {
+  id: string;
+  text: string;
+  is_checked: boolean;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ListRecipient {
+  user_id: string;
+  email: string;
+  display_name: string;
+  permission: string;
+  granted_at: string;
+}
+
+export interface HabitatList {
+  id: string;
+  title: string;
+  owner: MessagePerson;
+  is_owner: boolean;
+  can_edit: boolean;
+  permission: string;
+  items_total: number;
+  items_checked: number;
+  recipients_count: number;
+  items?: ListItem[];
+  recipients?: ListRecipient[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ListResponse {
+  items: HabitatList[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+

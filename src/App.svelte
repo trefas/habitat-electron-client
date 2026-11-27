@@ -7,9 +7,10 @@
   import AdminPanel from './lib/AdminPanel.svelte';
   import ProfilePage from './lib/ProfilePage.svelte';
   import MessagesPage from './lib/MessagesPage.svelte';
+  import ListsPage from './lib/ListsPage.svelte';
   import type { User } from './lib/types';
 
-  type MainView = 'welcome' | 'admin' | 'profile' | 'messages';
+  type MainView = 'welcome' | 'admin' | 'profile' | 'messages' | 'lists';
   type ViewState = 'checking' | 'unavailable' | 'login' | MainView;
 
   let view: ViewState = 'checking';
@@ -18,7 +19,9 @@
   let currentUser: User | null = null;
   let loginNotice = '';
   let previousView: 'welcome' | 'admin' = 'welcome';
-  let messagesReturnView: 'welcome' | 'admin' = 'welcome';
+  let messagesReturnView: 'welcome' | 'admin' | 'lists' = 'welcome';
+  let listsReturnView: 'welcome' | 'admin' | 'messages' = 'welcome';
+  let listsInitialID: string | null = null;
 
   const isCentered = () => view === 'checking' || view === 'unavailable' || view === 'login';
 
@@ -104,12 +107,34 @@
   };
 
   const handleOpenMessages = () => {
-    messagesReturnView = view === 'admin' ? 'admin' : 'welcome';
+    messagesReturnView = view === 'admin' ? 'admin' : view === 'lists' ? 'lists' : 'welcome';
     view = 'messages';
   };
 
   const handleMessagesBack = () => {
     view = messagesReturnView;
+  };
+
+  const handleOpenLists = () => {
+    listsReturnView = view === 'admin' ? 'admin' : view === 'messages' ? 'messages' : 'welcome';
+    listsInitialID = null;
+    view = 'lists';
+  };
+
+  const handleListsBack = () => {
+    listsInitialID = null;
+    view = listsReturnView;
+  };
+
+  const handleListsMessages = () => {
+    messagesReturnView = 'lists';
+    view = 'messages';
+  };
+
+  const handleOpenListFromNotification = (event: CustomEvent<{ id: string }>) => {
+    listsReturnView = 'messages';
+    listsInitialID = event.detail.id;
+    view = 'lists';
   };
 
   const handleUserUpdated = (event: CustomEvent<User>) => {
@@ -136,6 +161,7 @@
       on:logout={handleLogout}
       on:profile={handleOpenProfile}
       on:messages={handleOpenMessages}
+      on:lists={handleOpenLists}
       on:userUpdated={handleUserUpdated}
     />
   {:else if view === 'admin' && currentUser}
@@ -144,10 +170,22 @@
       on:logout={handleLogout}
       on:profile={handleOpenProfile}
       on:messages={handleOpenMessages}
+      on:lists={handleOpenLists}
       on:userUpdated={handleUserUpdated}
     />
   {:else if view === 'messages' && currentUser}
-    <MessagesPage on:back={handleMessagesBack} on:logout={handleLogout} />
+    <MessagesPage
+      on:back={handleMessagesBack}
+      on:logout={handleLogout}
+      on:openList={handleOpenListFromNotification}
+    />
+  {:else if view === 'lists' && currentUser}
+    <ListsPage
+      initialListID={listsInitialID}
+      on:back={handleListsBack}
+      on:logout={handleLogout}
+      on:messages={handleListsMessages}
+    />
   {:else if view === 'profile' && currentUser}
     <ProfilePage
       user={currentUser}

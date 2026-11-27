@@ -362,6 +362,14 @@
       if (!notification.is_read) {
         await markNotificationRead(notification);
       }
+
+      if (notification.payload?.entity_type === 'list') {
+        if (notification.kind !== 'share_revoked') {
+          dispatch('openList', { id: notification.entity_id });
+        }
+        return;
+      }
+
       const message: Message = await api.get(`/api/v1/messages/${notification.entity_id}`);
       await openMessage(message);
     } catch (error: any) {
@@ -369,10 +377,12 @@
     }
   };
 
-  const notificationKindLabel = (kind: string) => {
-    switch (kind) {
+  const notificationKindLabel = (notification: AppNotification) => {
+    switch (notification.kind) {
       case 'share_received':
-        return 'Доступ к сообщению';
+        return notification.payload?.entity_type === 'list'
+          ? 'Доступ к списку'
+          : 'Доступ к сообщению';
       case 'share_revoked':
         return 'Доступ отозван';
       case 'share_expiring':
@@ -382,12 +392,12 @@
       case 'entity_updated':
         return 'Сущность обновлена';
       default:
-        return kind;
+        return notification.kind;
     }
   };
 
   const notificationPreview = (notification: AppNotification) =>
-    notification.payload?.text_preview || notificationKindLabel(notification.kind);
+    notification.payload?.text_preview || notificationKindLabel(notification);
 
   onMount(() => {
     void loadMessages();
@@ -475,7 +485,7 @@
             <tbody>
               {#each notifications as item (item.id)}
                 <tr class:unread-row={!item.is_read}>
-                  <td>{notificationKindLabel(item.kind)}</td>
+                  <td>{notificationKindLabel(item)}</td>
                   <td class="message-preview">{notificationPreview(item)}</td>
                   <td>{formatDate(item.created_at)}</td>
                   <td>
